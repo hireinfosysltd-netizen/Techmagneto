@@ -1,0 +1,17 @@
+{
+  "upiId": "",
+  "payeeName": "TECHMAGNET",
+  "paymentLink": "",
+  "merchantCode": "TECHMAGNET",
+  "acceptedApps": [
+    "PhonePe",
+    "Google Pay",
+    "Paytm",
+    "BHIM",
+    "MobiKwik",
+    "CRED"
+  ],
+  "lastSyncedAt": "2026-10-11T15:43:00.000Z",
+  "syncSource": "manual",
+  "syncLogs": []
+}
