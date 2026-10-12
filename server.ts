@@ -9,13 +9,35 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
+// Middleware for CORS
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Pragma, Cache-Control');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// Middleware for parsing JSON & Urlencoded payloads
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-// File path for persistent UPI & Payment configuration
-const CONFIG_FILE = path.resolve(__dirname, 'upi_config.json');
+// Never cache API responses - always serve freshest server state to visitors
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
 
-interface UpiConfig {
+// File paths for persistent storage
+const CONFIG_FILE = path.resolve(__dirname, 'upi_config.json');
+const SETTINGS_FILE = path.resolve(__dirname, 'site_settings.json');
+
+export interface UpiConfig {
   upiId: string;
   payeeName: string;
   paymentLink?: string;
@@ -35,7 +57,7 @@ interface UpiConfig {
 }
 
 const DEFAULT_CONFIG: UpiConfig = {
-  upiId: '',
+  upiId: '6655788954488',
   payeeName: 'TECHMAGNET',
   paymentLink: '',
   merchantCode: 'TECHMAGNET',
@@ -49,7 +71,8 @@ function readConfig(): UpiConfig {
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const data = fs.readFileSync(CONFIG_FILE, 'utf-8');
-      return { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+      const parsed = JSON.parse(data);
+      return { ...DEFAULT_CONFIG, ...parsed };
     }
   } catch (err) {
     console.warn('Error reading upi_config.json, using defaults:', err);
@@ -66,32 +89,35 @@ function writeConfig(config: UpiConfig) {
 }
 
 // ----------------------------------------------------
-// API ROUTES
+// REAL-TIME BROADCAST ENGINE (Server-Sent Events)
 // ----------------------------------------------------
+const sseClients = new Set<express.Response>();
 
-// 1. Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'TECHMAGNET API', timestamp: new Date().toISOString() });
-});
-
-// 2. GET current UPI & Payment Gateway details
-app.get('/api/upi', (req, res) => {
-  const config = readConfig();
-  res.json({
-    success: true,
+function broadcastUpiUpdate(config: UpiConfig) {
+  const payload = JSON.stringify({
+    type: 'upi_update',
     upi: {
       upiId: config.upiId,
       payeeName: config.payeeName,
       paymentLink: config.paymentLink || '',
       scannerImageUrl: config.scannerImageUrl || '',
-      merchantCode: config.merchantCode,
-      acceptedApps: config.acceptedApps,
+      merchantCode: config.merchantCode || 'TECHMAGNET',
+      acceptedApps: config.acceptedApps || DEFAULT_CONFIG.acceptedApps,
       lastSyncedAt: config.lastSyncedAt,
       syncSource: config.syncSource,
     },
     syncLogs: config.syncLogs?.slice(-15) || [],
+    timestamp: Date.now(),
   });
-});
+
+  for (const client of sseClients) {
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
 
 // Helper: parse UPI URL format (e.g. upi://pay?pa=merchant@upi&pn=TECHMAGNET...)
 function parseUpiUrl(rawUrl: string): { upiId?: string; payeeName?: string } {
@@ -119,19 +145,101 @@ function parseUpiUrl(rawUrl: string): { upiId?: string; payeeName?: string } {
   return {};
 }
 
-// 3. POST Webhook / REST API to automatically upload UPI link or scanner from an external app
-app.post('/api/upi/sync', (req, res) => {
+// ----------------------------------------------------
+// API ROUTES
+// ----------------------------------------------------
+
+// 1. Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'TECHMAGNET Live API',
+    connectedClients: sseClients.size,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 2. Real-time SSE stream for instant visitor synchronization
+app.get('/api/upi/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders?.();
+
+  // Send current state immediately on connection
+  const config = readConfig();
+  const initialPayload = JSON.stringify({
+    type: 'upi_update',
+    upi: {
+      upiId: config.upiId,
+      payeeName: config.payeeName,
+      paymentLink: config.paymentLink || '',
+      scannerImageUrl: config.scannerImageUrl || '',
+      merchantCode: config.merchantCode || 'TECHMAGNET',
+      acceptedApps: config.acceptedApps || DEFAULT_CONFIG.acceptedApps,
+      lastSyncedAt: config.lastSyncedAt,
+      syncSource: config.syncSource,
+    },
+    syncLogs: config.syncLogs?.slice(-15) || [],
+    timestamp: Date.now(),
+  });
+
+  res.write(`data: ${initialPayload}\n\n`);
+
+  sseClients.add(res);
+
+  // Keep-alive ping every 12 seconds to prevent Cloud Run/proxy timeout
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': keepalive\n\n');
+    } catch {
+      clearInterval(heartbeat);
+      sseClients.delete(res);
+    }
+  }, 12000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    sseClients.delete(res);
+  });
+});
+
+// 3. GET current UPI & Payment Gateway details (instant JSON read)
+app.get('/api/upi', (req, res) => {
+  const config = readConfig();
+  res.json({
+    success: true,
+    upi: {
+      upiId: config.upiId,
+      payeeName: config.payeeName,
+      paymentLink: config.paymentLink || '',
+      scannerImageUrl: config.scannerImageUrl || '',
+      merchantCode: config.merchantCode || 'TECHMAGNET',
+      acceptedApps: config.acceptedApps || DEFAULT_CONFIG.acceptedApps,
+      lastSyncedAt: config.lastSyncedAt,
+      syncSource: config.syncSource,
+    },
+    syncLogs: config.syncLogs?.slice(-15) || [],
+    activeConnections: sseClients.size,
+  });
+});
+
+// 4. POST update UPI configuration (called by Admin Panel or external webhook)
+app.post(['/api/upi', '/api/upi/sync'], (req, res) => {
   const {
     upiId,
     upiLink,
     paymentLink,
     payeeName,
     scannerImageUrl,
+    merchantCode,
+    acceptedApps,
     source,
     apiKey,
   } = req.body;
 
-  // Optional security key check (e.g. admin password or custom token)
+  // Optional security key check
   const incomingAuth = req.headers.authorization?.replace(/^Bearer\s+/i, '') || apiKey;
   const EXPECTED_KEY = process.env.UPI_WEBHOOK_KEY || '214966';
   if (incomingAuth && incomingAuth !== EXPECTED_KEY && incomingAuth !== 'techmagnet_live_key') {
@@ -161,27 +269,23 @@ app.post('/api/upi/sync', (req, res) => {
     if (parsed.payeeName && !targetPayee) targetPayee = parsed.payeeName;
   }
 
-  if (targetUpiId === undefined && targetPaymentLink === undefined && !scannerImageUrl) {
-    return res.status(400).json({
-      success: false,
-      error: 'Missing required field: provide at least "upiId", "paymentLink", "upiLink", or "scannerImageUrl".',
-    });
-  }
-
   const currentConfig = readConfig();
-
   const now = new Date().toISOString();
+
+  // If explicitly provided, use target; otherwise keep current
   const resolvedUpiId = targetUpiId !== undefined ? targetUpiId : currentConfig.upiId;
-  const resolvedPaymentLink = targetPaymentLink !== undefined ? targetPaymentLink : currentConfig.paymentLink;
+  const resolvedPaymentLink = targetPaymentLink !== undefined ? targetPaymentLink : (currentConfig.paymentLink || '');
 
   const updatedConfig: UpiConfig = {
     ...currentConfig,
     upiId: resolvedUpiId,
-    payeeName: targetPayee || currentConfig.payeeName,
+    payeeName: targetPayee || currentConfig.payeeName || 'TECHMAGNET',
     paymentLink: resolvedPaymentLink,
-    scannerImageUrl: scannerImageUrl || currentConfig.scannerImageUrl,
+    scannerImageUrl: scannerImageUrl !== undefined ? scannerImageUrl : (currentConfig.scannerImageUrl || ''),
+    merchantCode: merchantCode || currentConfig.merchantCode || 'TECHMAGNET',
+    acceptedApps: Array.isArray(acceptedApps) ? acceptedApps : (currentConfig.acceptedApps || DEFAULT_CONFIG.acceptedApps),
     lastSyncedAt: now,
-    syncSource: (source as any) || 'app_webhook',
+    syncSource: (source as any) || 'manual',
     syncLogs: [
       ...(currentConfig.syncLogs || []),
       {
@@ -189,7 +293,7 @@ app.post('/api/upi/sync', (req, res) => {
         timestamp: now,
         upiId: resolvedUpiId || 'Cleared',
         paymentLink: resolvedPaymentLink || undefined,
-        source: source || 'External App Webhook',
+        source: source || 'Admin Panel Manual',
         success: true,
       },
     ].slice(-25),
@@ -197,24 +301,69 @@ app.post('/api/upi/sync', (req, res) => {
 
   writeConfig(updatedConfig);
 
+  // Broadcast instantly to all active visitors
+  broadcastUpiUpdate(updatedConfig);
+
   return res.json({
     success: true,
-    message: resolvedUpiId ? 'Payment details successfully updated!' : 'UPI configuration updated (no active UPI ID)',
+    message: resolvedUpiId
+      ? `Payment details updated to "${resolvedUpiId}" and broadcast live to all visitors!`
+      : 'UPI configuration updated (cleared)',
     activeUpiId: updatedConfig.upiId,
     activePaymentLink: updatedConfig.paymentLink,
     payeeName: updatedConfig.payeeName,
     lastSyncedAt: now,
+    upi: updatedConfig,
   });
 });
 
-// 4. POST Reset UPI config
+// 5. POST Reset UPI config
 app.post('/api/upi/reset', (req, res) => {
   writeConfig(DEFAULT_CONFIG);
+  broadcastUpiUpdate(DEFAULT_CONFIG);
   res.json({
     success: true,
-    message: 'Reset UPI configuration to unconfigured state',
+    message: 'Reset UPI configuration to default state',
     config: DEFAULT_CONFIG,
   });
+});
+
+// 6. Generic Site Settings API (Plans, Contact, GST, Platforms, Services)
+app.get('/api/settings', (req, res) => {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const data = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+      return res.json({ success: true, settings: JSON.parse(data) });
+    }
+  } catch (err) {
+    console.warn('Error reading site_settings.json:', err);
+  }
+  res.json({ success: true, settings: null });
+});
+
+app.post('/api/settings', (req, res) => {
+  try {
+    const newSettings = req.body;
+    if (newSettings && typeof newSettings === 'object') {
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(newSettings, null, 2), 'utf-8');
+      // If UPI is included in site settings, sync upi_config as well
+      if (newSettings.upi) {
+        const currentConfig = readConfig();
+        const merged: UpiConfig = {
+          ...currentConfig,
+          ...newSettings.upi,
+          lastSyncedAt: new Date().toISOString(),
+        };
+        writeConfig(merged);
+        broadcastUpiUpdate(merged);
+      }
+      return res.json({ success: true, message: 'Settings saved to server' });
+    }
+  } catch (err) {
+    console.error('Error saving site_settings.json:', err);
+    return res.status(500).json({ success: false, error: 'Could not write settings file' });
+  }
+  res.status(400).json({ success: false, error: 'Invalid settings body' });
 });
 
 // ----------------------------------------------------

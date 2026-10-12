@@ -61,6 +61,19 @@ export const AgencyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // Clear any legacy default placeholder
           parsed.upi.upiId = '';
         }
+        if (parsed.plans && Array.isArray(parsed.plans)) {
+          parsed.plans = parsed.plans.map((p: any) => {
+            if (p.id === 'starter' && (p.rawPrice === 2999 || p.price === '₹2,999')) {
+              return {
+                ...p,
+                price: '₹2,000',
+                rawPrice: 2000,
+                waMessage: 'Hi Techmagnet, I am interested in the Starter Plan (₹2,000). Please share the enrollment details.',
+              };
+            }
+            return p;
+          });
+        }
         return parsed;
       }
     } catch {
@@ -133,36 +146,49 @@ export const AgencyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     Array<{ id: string; timestamp: string; upiId: string; paymentLink?: string; source: string; success: boolean }>
   >([]);
 
+  // Robust updater for server-provided UPI configuration
+  const applyServerUpi = (serverUpi: Partial<UpiGatewayDetails>) => {
+    if (!serverUpi) return;
+    setSettings((prev) => {
+      const upiId = serverUpi.upiId !== undefined ? String(serverUpi.upiId).trim() : (prev.upi?.upiId || '');
+      const payeeName = serverUpi.payeeName || prev.upi?.payeeName || 'TECHMAGNET';
+      const paymentLink = serverUpi.paymentLink !== undefined ? String(serverUpi.paymentLink).trim() : (prev.upi?.paymentLink || '');
+      const scannerImageUrl = serverUpi.scannerImageUrl !== undefined ? String(serverUpi.scannerImageUrl) : (prev.upi?.scannerImageUrl || '');
+      const merchantCode = serverUpi.merchantCode || prev.upi?.merchantCode || 'TECHMAGNET';
+      const acceptedApps = serverUpi.acceptedApps || prev.upi?.acceptedApps || DEFAULT_UPI.acceptedApps;
+      const lastSyncedAt = serverUpi.lastSyncedAt || new Date().toISOString();
+      const syncSource = serverUpi.syncSource || prev.upi?.syncSource || 'manual';
+
+      return {
+        ...prev,
+        upi: {
+          upiId,
+          payeeName,
+          paymentLink,
+          scannerImageUrl,
+          merchantCode,
+          acceptedApps,
+          lastSyncedAt,
+          syncSource,
+        },
+      };
+    });
+  };
+
   // Function to pull latest UPI & payment link settings from backend server
   const syncWithServer = async () => {
     try {
-      const res = await fetch('/api/upi');
+      const res = await fetch(`/api/upi?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          Pragma: 'no-cache',
+          'Cache-Control': 'no-cache, no-store',
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.upi) {
-          setSettings((prev) => {
-            const serverUpiId = data.upi.upiId || '';
-            const serverPaymentLink = data.upi.paymentLink || '';
-            const serverPayeeName = data.upi.payeeName || 'TECHMAGNET';
-            const hasChanged =
-              prev.upi.upiId !== serverUpiId ||
-              prev.upi.paymentLink !== serverPaymentLink ||
-              prev.upi.payeeName !== serverPayeeName ||
-              prev.upi.lastSyncedAt !== data.upi.lastSyncedAt;
-            if (hasChanged) {
-              return {
-                ...prev,
-                upi: {
-                  ...prev.upi,
-                  ...data.upi,
-                  upiId: serverUpiId,
-                  paymentLink: serverPaymentLink,
-                  payeeName: serverPayeeName,
-                },
-              };
-            }
-            return prev;
-          });
+          applyServerUpi(data.upi);
         }
         if (data.syncLogs && Array.isArray(data.syncLogs)) {
           setServerSyncLogs(data.syncLogs);
@@ -173,11 +199,40 @@ export const AgencyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  // Initial fetch and light periodic polling (every 8s) to detect incoming app scanner uploads
+  // Initial fetch, real-time SSE stream, and short polling for instant visitor sync
   useEffect(() => {
     syncWithServer();
-    const interval = setInterval(syncWithServer, 8000);
-    return () => clearInterval(interval);
+
+    // Connect to Server-Sent Events stream for instant real-time pushes
+    let sse: EventSource | null = null;
+    try {
+      sse = new EventSource('/api/upi/stream');
+      sse.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.type === 'upi_update' && data.upi) {
+            applyServerUpi(data.upi);
+            if (data.syncLogs) {
+              setServerSyncLogs(data.syncLogs);
+            }
+          }
+        } catch {
+          // ignore non-json ping
+        }
+      };
+    } catch {
+      // SSE unsupported or blocked
+    }
+
+    // Fallback polling every 3 seconds to guarantee sync across all visitors
+    const interval = setInterval(syncWithServer, 3000);
+
+    return () => {
+      clearInterval(interval);
+      if (sse) {
+        sse.close();
+      }
+    };
   }, []);
 
   const updateContact = (contact: AgencyContact) => {
@@ -205,21 +260,31 @@ export const AgencyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateUpi = (upi: UpiGatewayDetails) => {
-    setSettings((prev) => ({ ...prev, upi }));
-    // Also push to backend server
-    fetch('/api/upi/sync', {
+    applyServerUpi(upi);
+
+    // Also push to backend server with immediate broadcast to all visitors
+    fetch('/api/upi', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer 214966',
+      },
       body: JSON.stringify({
         upiId: upi.upiId,
         payeeName: upi.payeeName,
         paymentLink: upi.paymentLink,
         scannerImageUrl: upi.scannerImageUrl,
+        merchantCode: upi.merchantCode,
+        acceptedApps: upi.acceptedApps,
         source: upi.syncSource || 'Admin Panel Manual',
       }),
     })
       .then((res) => res.json())
-      .then(() => syncWithServer())
+      .then((data) => {
+        if (data && data.upi) {
+          applyServerUpi(data.upi);
+        }
+      })
       .catch((err) => console.warn('Could not sync to backend:', err));
   };
 
@@ -227,6 +292,8 @@ export const AgencyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setSelectedPaymentPlan(plan || null);
     setCustomPaymentAmount(customAmount || null);
     setIsPaymentModalOpen(true);
+    // Instant server refresh on modal open
+    syncWithServer();
   };
 
   const closePaymentModal = () => {

@@ -21,7 +21,7 @@ export const DEFAULT_GST: GstDetails = {
 };
 
 export const DEFAULT_UPI: UpiGatewayDetails = {
-  upiId: '',
+  upiId: '6655788954488',
   payeeName: 'TECHMAGNET',
   paymentLink: '',
   merchantCode: 'TECHMAGNET',
@@ -33,8 +33,8 @@ export const DEFAULT_PLANS = [
   {
     id: 'starter' as const,
     name: 'Starter Plan',
-    price: '₹2,999',
-    rawPrice: 2999,
+    price: '₹2,000',
+    rawPrice: 2000,
     tagline: 'Ideal for emerging affiliates testing performance campaigns',
     isPopular: false,
     features: [
@@ -44,7 +44,7 @@ export const DEFAULT_PLANS = [
       'WhatsApp assistance',
       'Campaign reporting',
     ],
-    waMessage: 'Hi Techmagnet, I am interested in the Starter Plan (₹2,999). Please share the enrollment details.',
+    waMessage: 'Hi Techmagnet, I am interested in the Starter Plan (₹2,000). Please share the enrollment details.',
   },
   {
     id: 'growth' as const,

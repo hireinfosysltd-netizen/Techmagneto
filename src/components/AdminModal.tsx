@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
 import {
@@ -86,22 +86,25 @@ export const AdminModal: React.FC = () => {
   const [simulationLog, setSimulationLog] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Sync draft states when modal opens
+  const prevIsOpenRef = useRef(false);
+
+  // Sync draft states ONLY when modal transitions from closed to open
   useEffect(() => {
-    if (isAdminModalOpen) {
+    if (isAdminModalOpen && !prevIsOpenRef.current) {
       setDraftPlans(settings.plans);
       setDraftPlatforms(settings.platforms);
       setDraftServices(settings.services);
       setDraftContact(settings.contact);
       setDraftGst(settings.gst);
       setDraftUpi(settings.upi || {
-        upiId: '',
+        upiId: '6655788954488',
         payeeName: 'TECHMAGNET',
         merchantCode: 'TECHMAGNET',
         acceptedApps: ['PhonePe', 'Google Pay', 'Paytm', 'BHIM', 'MobiKwik', 'CRED'],
       });
     }
-  }, [isAdminModalOpen, settings]);
+    prevIsOpenRef.current = isAdminModalOpen;
+  }, [isAdminModalOpen]);
 
   // Generate live preview QR code for the draft UPI ID
   useEffect(() => {
@@ -291,6 +294,24 @@ export const AdminModal: React.FC = () => {
     updateContact(draftContact);
     updateGst(draftGst);
     updateUpi(draftUpi);
+
+    // Persist full settings on server as well for all visitors
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer 214966',
+      },
+      body: JSON.stringify({
+        contact: draftContact,
+        plans: draftPlans,
+        platforms: draftPlatforms,
+        services: draftServices,
+        gst: draftGst,
+        upi: draftUpi,
+      }),
+    }).catch(() => {});
+
     setSaveNotification(true);
     setTimeout(() => {
       setSaveNotification(false);
@@ -819,7 +840,7 @@ export const AdminModal: React.FC = () => {
                     className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-900/40 transition-all self-start sm:self-auto shrink-0"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>{upiSavedToast ? 'Settings Saved!' : 'Save Payment Settings'}</span>
+                    <span>{upiSavedToast ? 'Saved & Live for All Visitors!' : 'Save Payment Settings'}</span>
                   </button>
                 </div>
               </div>
@@ -828,7 +849,9 @@ export const AdminModal: React.FC = () => {
                 <div className="p-3 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-fade-in">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
-                    Payment configuration successfully saved! {draftUpi.upiId ? `UPI ID "${draftUpi.upiId}" is active across the entire website.` : 'UPI is now unconfigured.'}
+                    {draftUpi.upiId
+                      ? `UPI ID "${draftUpi.upiId}" has been saved to the server and broadcast live to all visitors!`
+                      : 'UPI payment configuration cleared.'}
                   </span>
                 </div>
               )}

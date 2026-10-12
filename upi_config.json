@@ -1,5 +1,5 @@
 {
-  "upiId": "",
+  "upiId": "6655788954488",
   "payeeName": "TECHMAGNET",
   "paymentLink": "",
   "merchantCode": "TECHMAGNET",
@@ -11,7 +11,30 @@
     "MobiKwik",
     "CRED"
   ],
-  "lastSyncedAt": "2026-10-11T15:43:00.000Z",
+  "lastSyncedAt": "2026-10-11T18:59:22.027Z",
   "syncSource": "manual",
-  "syncLogs": []
+  "syncLogs": [
+    {
+      "id": "sync-1",
+      "timestamp": "2026-10-11T18:46:14.069Z",
+      "upiId": "6655788954488",
+      "source": "Admin Panel",
+      "success": true
+    },
+    {
+      "id": "sync-1791745143538",
+      "timestamp": "2026-10-11T18:59:03.538Z",
+      "upiId": "6655788954488@paytm",
+      "source": "Admin Panel Manual",
+      "success": true
+    },
+    {
+      "id": "sync-1791745162027",
+      "timestamp": "2026-10-11T18:59:22.027Z",
+      "upiId": "6655788954488",
+      "source": "Admin Panel Manual",
+      "success": true
+    }
+  ],
+  "scannerImageUrl": ""
 }

@@ -43,7 +43,7 @@ export default function App() {
           {/* About & Why Choose Techmagnet */}
           <WhyChooseUs />
 
-          {/* Pricing & Plans (Starter ₹2,999, Growth ₹5,999, Premium ₹9,999, Enterprise) */}
+          {/* Pricing & Plans (Starter ₹2,000, Growth ₹5,999, Premium ₹9,999, Enterprise) */}
           <Pricing />
 
           {/* 4-Step How It Works */}

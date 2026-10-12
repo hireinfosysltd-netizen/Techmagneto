@@ -100,7 +100,7 @@ export const Navbar: React.FC = () => {
               type="button"
               onClick={() => openPaymentModal()}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:text-white bg-emerald-950/70 hover:bg-emerald-600 border border-emerald-500/40 rounded-lg transition-all duration-200 shadow-sm active:scale-95"
-              title={`Instant UPI Payment (${settings.upi.upiId})`}
+              title={settings.upi?.upiId ? `Instant UPI Payment (${settings.upi.upiId})` : 'Instant UPI Payment'}
             >
               <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
               <span>Pay via UPI</span>
@@ -203,7 +203,7 @@ export const Navbar: React.FC = () => {
                 className="flex items-center justify-center gap-2 w-full py-2.5 px-4 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-md shadow-emerald-950 transition-colors"
               >
                 <Smartphone className="w-4 h-4" />
-                <span>Pay via UPI Gateway ({settings.upi.upiId})</span>
+                <span>Pay via UPI Gateway{settings.upi?.upiId ? ` (${settings.upi.upiId})` : ''}</span>
               </button>
               <button
                 onClick={() => {

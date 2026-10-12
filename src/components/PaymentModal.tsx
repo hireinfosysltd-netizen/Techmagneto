@@ -26,6 +26,7 @@ export const PaymentModal: React.FC = () => {
     settings,
     openWhatsApp,
     setIsAdminModalOpen,
+    syncWithServer,
   } = useAgency();
 
   const utrInputId = useId();
@@ -66,6 +67,9 @@ export const PaymentModal: React.FC = () => {
     }
     setActiveStep('pay');
     setUtrNumber('');
+    if (isPaymentModalOpen) {
+      syncWithServer();
+    }
   }, [selectedPaymentPlan, customPaymentAmount, isPaymentModalOpen]);
 
   // Construct standard NPCI UPI Payment URI if UPI ID is configured
@@ -214,13 +218,22 @@ Please verify my payment and initiate campaign onboarding.`;
             {/* Quick Amount Switcher */}
             <div className="flex items-center gap-2 text-xs">
               <span className="text-slate-400">Select Amount:</span>
-              {[
-                { label: 'Starter (₹2,999)', val: 2999, name: 'Starter Plan' },
-                { label: 'Growth (₹5,999)', val: 5999, name: 'Growth Plan' },
-                { label: 'Premium (₹9,999)', val: 9999, name: 'Premium Plan' },
-              ].map((p) => (
+              {(settings.plans?.filter((p) => p.id !== 'enterprise').length > 0
+                ? settings.plans
+                    .filter((p) => p.id !== 'enterprise')
+                    .map((p) => ({
+                      label: `${p.name} (${p.price})`,
+                      val: p.rawPrice || (p.id === 'starter' ? 2000 : p.id === 'growth' ? 5999 : 9999),
+                      name: p.name,
+                    }))
+                : [
+                    { label: 'Starter (₹2,000)', val: 2000, name: 'Starter Plan' },
+                    { label: 'Growth (₹5,999)', val: 5999, name: 'Growth Plan' },
+                    { label: 'Premium (₹9,999)', val: 9999, name: 'Premium Plan' },
+                  ]
+              ).map((p) => (
                 <button
-                  key={p.val}
+                  key={p.name}
                   type="button"
                   onClick={() => {
                     setAmount(p.val);

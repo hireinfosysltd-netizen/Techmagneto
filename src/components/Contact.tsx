@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Phone, MessageSquare, Send, CheckCircle2, Clock, MapPin, Mail, AlertCircle, ShieldCheck, ExternalLink } from 'lucide-react';
+import { Phone, MessageSquare, Send, CheckCircle2, Clock, MapPin, Mail, AlertCircle, ShieldCheck, ExternalLink, Sparkles } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { useAgency } from '../context/AgencyContext';
 
 export const Contact: React.FC = () => {
@@ -13,6 +14,52 @@ export const Contact: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Celebratory confetti animation launcher
+  const triggerConfettiCelebration = () => {
+    // Stage 1: Intense center cannon burst
+    confetti({
+      particleCount: 90,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'],
+      ticks: 200,
+      zIndex: 9999,
+    });
+
+    // Stage 2: Dual flanking side cannons
+    setTimeout(() => {
+      confetti({
+        particleCount: 55,
+        angle: 60,
+        spread: 60,
+        origin: { x: 0.05, y: 0.75 },
+        colors: ['#3b82f6', '#8b5cf6', '#10b981', '#38bdf8', '#fbbf24'],
+        zIndex: 9999,
+      });
+      confetti({
+        particleCount: 55,
+        angle: 120,
+        spread: 60,
+        origin: { x: 0.95, y: 0.75 },
+        colors: ['#3b82f6', '#8b5cf6', '#10b981', '#38bdf8', '#fbbf24'],
+        zIndex: 9999,
+      });
+    }, 220);
+
+    // Stage 3: Star & circle shower
+    setTimeout(() => {
+      confetti({
+        particleCount: 45,
+        spread: 100,
+        origin: { y: 0.4 },
+        shapes: ['star', 'circle'],
+        colors: ['#fbbf24', '#f43f5e', '#38bdf8', '#a855f7'],
+        zIndex: 9999,
+        scalar: 1.2,
+      });
+    }, 450);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !mobileNumber.trim()) {
@@ -22,6 +69,7 @@ export const Contact: React.FC = () => {
 
     setErrorMsg('');
     setSubmitted(true);
+    triggerConfettiCelebration();
 
     // Formatted WhatsApp message with all details
     const formattedWA = `*NEW INQUIRY FROM TECHMAGNET WEBSITE*
@@ -174,16 +222,30 @@ Please review and connect with me.`;
 
               {submitted ? (
                 <div className="py-12 text-center flex flex-col items-center">
-                  <div className="w-16 h-16 rounded-full bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mb-4 animate-bounce">
-                    <CheckCircle2 className="w-8 h-8" />
+                  <div className="relative mb-4">
+                    <div className="w-20 h-20 rounded-full bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-900/30">
+                      <CheckCircle2 className="w-10 h-10 animate-pulse" />
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
                   </div>
-                  <h4 className="text-xl font-bold text-white mb-2">Inquiry Form Generated!</h4>
+
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-xs font-semibold mb-3">
+                    <span>🎉 Inquiry Successfully Received!</span>
+                  </div>
+
+                  <h4 className="text-2xl font-bold text-white mb-2">
+                    {fullName ? `You're All Set, ${fullName.split(' ')[0]}!` : 'Inquiry Form Generated!'}
+                  </h4>
                   <p className="text-sm text-slate-300 max-w-md mb-6 leading-relaxed">
                     Opening WhatsApp to connect you directly with a Techmagnet strategist. If the chat window didn&apos;t open automatically, click the button below.
                   </p>
-                  <button
-                    onClick={() => {
-                      const formattedWA = `*NEW INQUIRY FROM TECHMAGNET WEBSITE*
+
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      onClick={() => {
+                        const formattedWA = `*NEW INQUIRY FROM TECHMAGNET WEBSITE*
 ----------------------------------------
 👤 *Full Name:* ${fullName.trim()}
 📱 *Mobile Number:* ${mobileNumber.trim()}
@@ -191,16 +253,33 @@ Please review and connect with me.`;
 📦 *Interested Plan:* ${interestedPlan}
 💬 *Message / Goals:* ${message.trim() || 'Looking for rapid enrollment generation.'}
 ----------------------------------------`;
-                      openWhatsApp(formattedWA);
-                    }}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-lg shadow-lg"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Open in WhatsApp</span>
-                  </button>
+                        openWhatsApp(formattedWA);
+                      }}
+                      className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-900/30 transition-all hover:scale-105 active:scale-95"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Open in WhatsApp</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => triggerConfettiCelebration()}
+                      className="inline-flex items-center gap-1.5 px-4 py-3.5 bg-slate-800/80 hover:bg-slate-700 text-amber-300 hover:text-amber-200 border border-amber-500/30 rounded-xl text-xs font-semibold transition-all hover:scale-105 active:scale-95"
+                      title="Trigger celebratory confetti"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>Celebrate 🎉</span>
+                    </button>
+                  </div>
+
                   <button
-                    onClick={() => setSubmitted(false)}
-                    className="text-xs text-slate-400 hover:text-white mt-4 underline underline-offset-4"
+                    onClick={() => {
+                      setSubmitted(false);
+                      setFullName('');
+                      setMobileNumber('');
+                      setMessage('');
+                    }}
+                    className="text-xs text-slate-400 hover:text-white mt-6 underline underline-offset-4 transition-colors"
                   >
                     Submit another inquiry
                   </button>

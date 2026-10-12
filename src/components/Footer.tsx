@@ -44,7 +44,7 @@ export const Footer: React.FC = () => {
                 className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 hover:text-white hover:bg-emerald-600 transition-colors shadow-sm"
               >
                 <Smartphone className="w-3.5 h-3.5" />
-                <span>UPI Pay: {settings.upi.upiId}</span>
+                <span>UPI Pay: {settings.upi?.upiId || 'Instant Clearing'}</span>
               </button>
 
               <button
